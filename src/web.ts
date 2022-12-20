@@ -48,7 +48,7 @@ export class ChromecastWeb extends WebPlugin implements ChromecastPlugin {
 
         const apiConfig = new this.cast.ApiConfig(
           sessionRequest,
-          () => {},
+          () => { },
           (status: any) => {
             if (status === this.cast.ReceiverAvailability.AVAILABLE) {
             }
@@ -77,6 +77,18 @@ export class ChromecastWeb extends WebPlugin implements ChromecastPlugin {
     }
     // this.session.loadMedia(request, this.onMediaDiscovered.bind(this, 'loadMedia'), this.onMediaError);
     this.session.loadMedia(request);
+    return true;
+  }
+  async sendMessage(messageObj: any) {
+    console.log('Send message via session', this.session);
+    if (!this.session) {
+      return false;
+    }
+
+    this.session.sendMessage(messageObj.namespace, messageObj.message);
+    if (messageObj.callback && typeof messageObj.callback === 'function') {
+      messageObj.callback();
+    }
     return true;
   }
 }

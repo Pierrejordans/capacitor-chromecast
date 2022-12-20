@@ -1,4 +1,4 @@
-package com.gameleap.plugins.chromecast;
+package com.caprockapps.plugins.chromecast;
 
 import java.io.IOException;
 import java.util.ArrayList;

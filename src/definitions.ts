@@ -11,4 +11,6 @@ export interface ChromecastPlugin {
     eventName: string,
     listenerFunc: ListenerCallback,
   ): Promise<PluginListenerHandle> & PluginListenerHandle;
+
+  launchMedia(messageObj: any): Promise<boolean>;
 }

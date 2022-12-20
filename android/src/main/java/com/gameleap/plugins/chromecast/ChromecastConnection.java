@@ -1,4 +1,4 @@
-package com.gameleap.plugins.chromecast;
+package com.caprockapps.plugins.chromecast;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -13,7 +13,7 @@ import androidx.mediarouter.media.MediaRouteSelector;
 import androidx.mediarouter.media.MediaRouter;
 import androidx.mediarouter.media.MediaRouter.RouteInfo;
 
-import com.gameleap.plugins.chromecast.lib.CastOptionsProvider;
+import com.caprockapps.plugins.chromecast.lib.CastOptionsProvider;
 import com.getcapacitor.PluginCall;
 import com.google.android.gms.cast.CastDevice;
 import com.google.android.gms.cast.CastMediaControlIntent;

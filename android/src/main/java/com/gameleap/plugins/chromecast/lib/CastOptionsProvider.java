@@ -1,4 +1,4 @@
-package com.gameleap.plugins.chromecast.lib;
+package com.caprockapps.plugins.chromecast.lib;
 
 import java.util.List;
 

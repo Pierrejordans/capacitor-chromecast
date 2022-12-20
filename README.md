@@ -17,6 +17,7 @@ npx cap sync
 * [`requestSession()`](#requestsession)
 * [`launchMedia(...)`](#launchmedia)
 * [`addListener(string, ...)`](#addlistenerstring)
+* [`launchMedia(...)`](#launchmedia)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -70,6 +71,21 @@ addListener(eventName: string, listenerFunc: ListenerCallback) => Promise<Plugin
 | **`listenerFunc`** | <code><a href="#listenercallback">ListenerCallback</a></code> |
 
 **Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt; & <a href="#pluginlistenerhandle">PluginListenerHandle</a></code>
+
+--------------------
+
+
+### launchMedia(...)
+
+```typescript
+launchMedia(messageObj: any) => Promise<boolean>
+```
+
+| Param            | Type             |
+| ---------------- | ---------------- |
+| **`messageObj`** | <code>any</code> |
+
+**Returns:** <code>Promise&lt;boolean&gt;</code>
 
 --------------------
 

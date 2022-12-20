@@ -1,5 +1,5 @@
 {
-  "name": "@gameleap/capacitor-chromecast",
+  "name": "@caprockapps/capacitor-chromecast",
   "version": "0.0.4",
   "description": "This is a plugin for Capacitor that enables Chromecast functionality for iOS and Android.",
   "main": "dist/plugin.cjs.js",
@@ -11,16 +11,16 @@
     "android/build.gradle",
     "dist/",
     "ios/Plugin/",
-    "GameleapCapacitorChromecast.podspec"
+    "CaprockAppsCapacitorChromecast.podspec"
   ],
   "author": "Dimitar Todorov",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gameleap/capacitor-chromecast.git"
+    "url": "git+https://bitbucket.org/slnz/capacitor-chromecast.git"
   },
   "bugs": {
-    "url": "https://github.com/gameleap/capacitor-chromecast/issues"
+    "url": "https://bitbucket.org/slnz/capacitor-chromecast/issues"
   },
   "keywords": [
     "capacitor",
