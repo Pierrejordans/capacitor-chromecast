@@ -5,7 +5,7 @@ This is a plugin for Capacitor that enables Chromecast functionality for iOS and
 ## Install
 
 ```bash
-npm install @gameleap/capacitor-chromecast
+npm install @caprockapps/capacitor-chromecast
 npx cap sync
 ```
 
