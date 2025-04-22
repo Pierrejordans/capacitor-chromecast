@@ -283,21 +283,21 @@ public class Chromecast extends Plugin {
             @Override
             public void onJoin(JSONObject jsonSession) {
                 try {
-                    pluginCall.success(JSObject.fromJSONObject(jsonSession));
+                    pluginCall.resolve(JSObject.fromJSONObject(jsonSession));
                 } catch (JSONException e) {
-                    pluginCall.error("json_parse_error", e);
+                    pluginCall.reject("json_parse_error", e);
                 }
             }
 
             @Override
             public void onError(int errorCode) {
                 // TODO maybe handle some of the error codes better
-                pluginCall.error("session_error");
+                pluginCall.reject("session_error");
             }
 
             @Override
             public void onCancel() {
-                pluginCall.error("cancel");
+                pluginCall.reject("cancel");
             }
         });
         return true;
@@ -317,18 +317,18 @@ public class Chromecast extends Plugin {
             @Override
             public void onJoin(JSONObject jsonSession) {
                 try {
-                    pluginCall.success(JSObject.fromJSONObject(jsonSession));
+                    pluginCall.resolve(JSObject.fromJSONObject(jsonSession));
                 } catch (JSONException e) {
-                    pluginCall.error("json_parse_error", e);
+                    pluginCall.reject("json_parse_error", e);
                 }
             }
 
             @Override
             public void onError(JSONObject message) {
                 try {
-                    pluginCall.success(JSObject.fromJSONObject(message));
+                    pluginCall.resolve(JSObject.fromJSONObject(message));
                 } catch (JSONException e) {
-                    pluginCall.error("json_parse_error", e);
+                    pluginCall.reject("json_parse_error", e);
                 }
             }
         });
@@ -619,8 +619,8 @@ public class Chromecast extends Plugin {
     public boolean startRouteScan(PluginCall pluginCall) {
         if (scanPluginCall != null) {
 
-            scanPluginCall.error("Started a new route scan before stopping previous one.");
-//            scanPluginCall.error(ChromecastUtilities.createError("cancel", "Started a new route scan before stopping previous one."));
+            scanPluginCall.reject("Started a new route scan before stopping previous one.");
+//            scanPluginCall.reject(ChromecastUtilities.createError("cancel", "Started a new route scan before stopping previous one."));
         }
         scanPluginCall = pluginCall;
         Runnable startScan = new Runnable() {
@@ -642,7 +642,7 @@ public class Chromecast extends Plugin {
                             }
                             ret.put("routes", retArr);
 
-                            scanPluginCall.success(ret);
+                            scanPluginCall.resolve(ret);
                         } else {
                             // Try to get the scan to stop because we already ended the scanCallback
                             connection.stopRouteScan(clientScan, null);
@@ -674,10 +674,10 @@ public class Chromecast extends Plugin {
             @Override
             public void run() {
                 if (scanPluginCall != null) {
-                    scanPluginCall.error("Scan stopped.");
+                    scanPluginCall.reject("Scan stopped.");
                     scanPluginCall = null;
                 }
-                pluginCall.success();
+                pluginCall.resolve();
             }
         });
         return true;
@@ -695,7 +695,7 @@ public class Chromecast extends Plugin {
                 @Override
                 public void run() {
                     if (scanPluginCall != null) {
-                        scanPluginCall.error("Scan stopped because setup triggered.");
+                        scanPluginCall.reject("Scan stopped because setup triggered.");
                         scanPluginCall = null;
                     }
                     sendEvent("SETUP", new JSObject());

@@ -215,7 +215,7 @@ public class ChromecastSession {
      */
     public void loadMedia(final String contentId, final JSONObject customData, final String contentType, final long duration, final String streamType, final boolean autoPlay, final double currentTime, final JSONObject metadata, final JSONObject textTrackStyle, final PluginCall callback) {
         if (client == null || session == null) {
-            callback.error("session_error");
+            callback.reject("session_error");
             return;
         }
         activity.runOnUiThread(new Runnable() {
@@ -232,9 +232,9 @@ public class ChromecastSession {
                     @Override
                     public void run() {
                         try {
-                            callback.success(JSObject.fromJSONObject(createMediaObject()));
+                            callback.resolve(JSObject.fromJSONObject(createMediaObject()));
                         } catch (JSONException e) {
-                            callback.error(e.getMessage(), e);
+                            callback.reject(e.getMessage(), e);
                         }
                     }
                 });
@@ -243,7 +243,7 @@ public class ChromecastSession {
                     public void onResult(@NonNull MediaChannelResult result) {
                         requestingMedia = false;
                         if (!result.getStatus().isSuccess()) {
-                            callback.error("session_error");
+                            callback.reject("session_error");
                             setQueueReloadCallback(null);
                         }
                     }

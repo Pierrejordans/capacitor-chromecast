@@ -1,6 +1,6 @@
 {
   "name": "@caprockapps/capacitor-chromecast",
-  "version": "7.0.0",
+  "version": "7.0.5",
   "description": "This is a plugin for Capacitor that enables Chromecast functionality for iOS and Android.",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -17,10 +17,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://bitbucket.org/slnz/capacitor-chromecast.git"
+    "url": "git+https://github.com/caprockapps/capacitor-chromecast.git"
   },
   "bugs": {
-    "url": "https://bitbucket.org/slnz/capacitor-chromecast/issues"
+    "url": "https://github.com/caprockapps/capacitor-chromecast/issues"
   },
   "keywords": [
     "capacitor",
