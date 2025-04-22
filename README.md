@@ -1,4 +1,4 @@
-# @gameleap/capacitor-chromecast
+# @caprockapps/capacitor-chromecast
 
 This is a plugin for Capacitor that enables Chromecast functionality for iOS and Android.
 
