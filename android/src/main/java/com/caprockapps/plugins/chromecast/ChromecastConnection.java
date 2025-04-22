@@ -21,6 +21,7 @@ import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.gms.cast.framework.CastState;
 import com.google.android.gms.cast.framework.CastStateListener;
+import com.google.android.gms.cast.framework.Session;
 import com.google.android.gms.cast.framework.SessionManager;
 import com.google.android.gms.cast.framework.SessionManagerListener;
 
@@ -70,6 +71,9 @@ public class ChromecastConnection {
                 // CastContext and prep it for searching for a session to rejoin
                 // Also adds the receiver update callback
                 getContext().addCastStateListener(listener);
+
+                // Also adds the receiver update callback
+                getContext().getSessionManager().addSessionManagerListener(listener);
             }
         });
     }
@@ -635,7 +639,7 @@ public class ChromecastConnection {
         }
     }
 
-    abstract static class Listener implements CastStateListener, ChromecastSession.Listener {
+    abstract static class Listener implements SessionManagerListener, CastStateListener, ChromecastSession.Listener {
         abstract void onReceiverAvailableUpdate(boolean available);
         abstract void onSessionRejoin(JSONObject jsonSession);
 

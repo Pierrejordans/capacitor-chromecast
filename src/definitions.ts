@@ -1,7 +1,7 @@
 import { ListenerCallback, PluginListenerHandle } from '@capacitor/core';
 
 export interface ChromecastPlugin {
-  initialize(): Promise<void>;
+  initialize(options: any): Promise<void>;
 
   requestSession(): Promise<void>;
 
@@ -10,7 +10,7 @@ export interface ChromecastPlugin {
   addListener(
     eventName: string,
     listenerFunc: ListenerCallback,
-  ): Promise<PluginListenerHandle> & PluginListenerHandle;
+  ): Promise<PluginListenerHandle>;
 
-  launchMedia(messageObj: any): Promise<boolean>;
+  sendMessage(messageObj: any): Promise<any>;
 }

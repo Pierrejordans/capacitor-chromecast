@@ -7,28 +7,27 @@ declare global {
     __onGCastApiAvailable: any;
     chrome: any;
   }
+  let cast: any;
 }
 
 export class ChromecastWeb extends WebPlugin implements ChromecastPlugin {
   private cast: any;
   private session: any;
+  private instance: any;
 
   constructor() {
-    super({
-      name: 'ChromecastPlugin',
-      platforms: ['web'],
-    });
+    super();
   }
 
-  private onInitSuccess() {
-    console.log('GCast initialization success');
-  }
+  // private onInitSuccess() {
+  //   console.log('GCast initialization success');
+  // }
 
-  private onError(err: any) {
-    console.error('GCast initialization failed', err);
-  }
+  // private onError(err: any) {
+  //   console.error('GCast initialization failed', err);
+  // }
 
-  public async initialize(appId?: string) {
+  public async initialize(options?: any) {
     const script = window['document'].createElement('script');
     script.setAttribute('type', 'text/javascript');
     script.setAttribute(
@@ -42,28 +41,32 @@ export class ChromecastWeb extends WebPlugin implements ChromecastPlugin {
 
       if (isAvailable) {
         this.cast = window['chrome'].cast;
-        const sessionRequest = new this.cast.SessionRequest(
-          appId || this.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-        );
+        cast.framework.CastContext.getInstance().setOptions({
+          receiverApplicationId: (options === null || options === void 0 ? void 0 : options.appId) || this.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+          autoJoinPolicy: this.cast.AutoJoinPolicy.ORIGIN_SCOPED
+        });
+        this.instance = cast.framework.CastContext.getInstance();
+        this.addCastEventListeners();
+        // const sessionRequest = new this.cast.SessionRequest(
+        //   options?.appId || this.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        // );
 
-        const apiConfig = new this.cast.ApiConfig(
-          sessionRequest,
-          () => { },
-          (status: any) => {
-            if (status === this.cast.ReceiverAvailability.AVAILABLE) {
-            }
-          },
-        );
-        this.cast.initialize(apiConfig, this.onInitSuccess, this.onError);
+        // const apiConfig = new this.cast.ApiConfig(
+        //   sessionRequest,
+        //   () => { },
+        //   (status: any) => {
+        //     if (status === this.cast.ReceiverAvailability.AVAILABLE) {
+        //     }
+        //   },
+        // );
+        // this.cast.initialize(apiConfig, this.onInitSuccess, this.onError);
       }
     };
   }
 
   public async requestSession(): Promise<void> {
     console.log('request session called');
-    return this.cast.requestSession((session: any) => {
-      this.session = session;
-    });
+    return this.instance.requestSession();
   }
 
   public async launchMedia(media: string) {
@@ -81,14 +84,52 @@ export class ChromecastWeb extends WebPlugin implements ChromecastPlugin {
   }
   async sendMessage(messageObj: any) {
     console.log('Send message via session', this.session);
+    if (!this.session || this.session != this.instance.getCurrentSession()) this.session = this.instance.getCurrentSession();
     if (!this.session) {
-      return false;
+      return { success: false, error: 'Session not established' };
     }
 
     this.session.sendMessage(messageObj.namespace, messageObj.message);
     if (messageObj.callback && typeof messageObj.callback === 'function') {
       messageObj.callback();
     }
-    return true;
+    return { success: true, error: null };
+  }
+  async addCastEventListeners() {
+    console.log('Add listener via instance', this.instance);
+    if (!this.instance) this.instance = cast.framework.CastContext.getInstance();
+    if (!this.instance) {
+      return { success: false, error: 'CastContext does not exist' };
+    }
+    const that = this;
+    this.instance.addEventListener(
+      cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+      function (event: any) {
+        const result: any = {};
+        const connected: boolean = that?.instance?.getCurrentSession()?.i?.status === cast.framework.CastState.CONNECTED.toLowerCase();
+        switch (event.sessionState) {
+          case cast.framework.SessionState.SESSION_STARTED:
+            result["isConnected"] = connected;
+            result["sessionId"] = event.session.getSessionId();
+            that.notifyListeners(cast.framework.SessionState.SESSION_STARTED, result);
+            event?.session?.addMessageListener('urn:x-cast:com.example.cast.mynamespace', (namespace: any, data: any) => {
+              that.notifyListeners('RECEIVER_MESSAGE', { key: { namespace: namespace, message: data } });
+            });
+            break;
+          case cast.framework.SessionState.SESSION_RESUMED:
+            result["isConnected"] = connected;
+            result["wasSuspended"] = false;
+            that.notifyListeners(cast.framework.SessionState.SESSION_RESUMED, result);
+            break;
+          case cast.framework.SessionState.SESSION_ENDED:
+            result["isConnected"] = connected;
+            result["error"] = event.errorCode;
+            that.notifyListeners(cast.framework.SessionState.SESSION_ENDED, result);
+            console.log('CastContext: CastSession disconnected');
+            // Update locally as necessary
+            break;
+        }
+      });
+    return {};
   }
 }

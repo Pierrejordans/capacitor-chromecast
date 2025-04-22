@@ -13,11 +13,11 @@ npx cap sync
 
 <docgen-index>
 
-* [`initialize()`](#initialize)
+* [`initialize(...)`](#initialize)
 * [`requestSession()`](#requestsession)
 * [`launchMedia(...)`](#launchmedia)
-* [`addListener(string, ...)`](#addlistenerstring)
-* [`launchMedia(...)`](#launchmedia)
+* [`addListener(string, ...)`](#addlistenerstring-)
+* [`sendMessage(...)`](#sendmessage)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -26,11 +26,15 @@ npx cap sync
 <docgen-api>
 <!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
 
-### initialize()
+### initialize(...)
 
 ```typescript
-initialize() => Promise<void>
+initialize(options: any) => Promise<void>
 ```
+
+| Param         | Type             |
+| ------------- | ---------------- |
+| **`options`** | <code>any</code> |
 
 --------------------
 
@@ -62,7 +66,7 @@ launchMedia(mediaUrl: string) => Promise<boolean>
 ### addListener(string, ...)
 
 ```typescript
-addListener(eventName: string, listenerFunc: ListenerCallback) => Promise<PluginListenerHandle> & PluginListenerHandle
+addListener(eventName: string, listenerFunc: ListenerCallback) => Promise<PluginListenerHandle>
 ```
 
 | Param              | Type                                                          |
@@ -70,22 +74,22 @@ addListener(eventName: string, listenerFunc: ListenerCallback) => Promise<Plugin
 | **`eventName`**    | <code>string</code>                                           |
 | **`listenerFunc`** | <code><a href="#listenercallback">ListenerCallback</a></code> |
 
-**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt; & <a href="#pluginlistenerhandle">PluginListenerHandle</a></code>
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
 
 --------------------
 
 
-### launchMedia(...)
+### sendMessage(...)
 
 ```typescript
-launchMedia(messageObj: any) => Promise<boolean>
+sendMessage(messageObj: any) => Promise<any>
 ```
 
 | Param            | Type             |
 | ---------------- | ---------------- |
 | **`messageObj`** | <code>any</code> |
 
-**Returns:** <code>Promise&lt;boolean&gt;</code>
+**Returns:** <code>Promise&lt;any&gt;</code>
 
 --------------------
 

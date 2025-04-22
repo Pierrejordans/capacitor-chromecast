@@ -1,0 +1,4 @@
+"@capacitor/android": "^4.0.0",
+    "@capacitor/core": "^4.0.0",
+    "@capacitor/docgen": "^0.0.18",
+    "@capacitor/ios": "^4.0.0",

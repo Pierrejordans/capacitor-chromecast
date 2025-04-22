@@ -2,6 +2,7 @@ package com.caprockapps.plugins.chromecast;
 
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.mediarouter.media.MediaRouter;
 
 import com.getcapacitor.JSArray;
@@ -11,6 +12,10 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.google.android.gms.cast.CastDevice;
+import com.google.android.gms.cast.framework.Session;
+import com.google.android.gms.cast.framework.media.RemoteMediaClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Status;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.LOG;
@@ -141,6 +146,64 @@ public class Chromecast extends Plugin {
 
         try {
             this.connection = new ChromecastConnection(getActivity(), new ChromecastConnection.Listener() {
+                @Override
+                public void onSessionStarted(Session session, String sessionId) {
+                  try {
+                    JSONObject result = new JSONObject();
+                    result.put("isConnected",session.isConnected());
+                    result.put("sessionId",sessionId);
+                    sendEvent("SESSION_STARTED", JSObject.fromJSONObject(result));
+                  } catch (JSONException e) {
+                  }
+                }
+
+
+              @Override
+              public void onSessionEnded(Session session, int error) {
+                try {
+                  JSONObject result = new JSONObject();
+                  result.put("isConnected",session.isConnected());
+                  result.put("error",error);
+                  sendEvent("SESSION_ENDED", JSObject.fromJSONObject(result));
+                } catch (JSONException e) {
+                }
+              }
+              @Override
+              public void onSessionEnding(Session session) {
+              }
+              @Override
+              public void onSessionResumeFailed(Session session, int error) {
+              }
+              @Override
+              public void onSessionResumed(Session session, boolean wasSuspended) {
+                try {
+                  JSONObject result = new JSONObject();
+                  result.put("isConnected",session.isConnected());
+                  result.put("wasSuspended",wasSuspended);
+                  sendEvent("SESSION_RESUMED", JSObject.fromJSONObject(result));
+                } catch (JSONException e) {
+                }
+              }
+              @Override
+              public void onSessionResuming(Session session, String sessionId) {
+              }
+              @Override
+              public void onSessionStartFailed(Session session, int error) {
+                try {
+                  JSONObject result = new JSONObject();
+                  result.put("isConnected",session.isConnected());
+                  result.put("error",error);
+                  sendEvent("SESSION_START_FAILED", JSObject.fromJSONObject(result));
+                } catch (JSONException e) {
+                }
+              }
+              @Override
+              public void onSessionStarting(Session session) {
+              }
+              @Override
+              public void onSessionSuspended(Session session, int reason) {
+              }
+
                 @Override
                 public void onSessionRejoin(JSONObject jsonSession) {
                     try {
@@ -315,9 +378,31 @@ public class Chromecast extends Plugin {
      * @param callbackContext called with .success or .error depending on the result
      * @return true for cordova
      */
-    public boolean sendMessage(String namespace, String message, final CallbackContext callbackContext) {
-        this.media.sendMessage(namespace, message, callbackContext);
-        return true;
+    @PluginMethod
+    public boolean sendMessage(final PluginCall pluginCall) {
+      String namespace = pluginCall.getString("namespace");
+      String message = pluginCall.getString("message");
+      JSObject returnObj = new JSObject();
+      returnObj.put("success",false);
+      //If we don't have a session here we need to try and get it
+      if(this.media == null) this.media = connection.getChromecastSession();
+      //If we still don't have a session we can't call sendMessage return false;
+      if(this.media == null){
+        pluginCall.resolve(returnObj);
+        return false;
+      }
+      this.media.sendMessage(namespace, message,new ResultCallback<Status>() {
+        @Override
+        public void onResult(Status result) {
+          if (!result.isSuccess()) {
+            returnObj.put("error",result.getStatus().toString());
+          } else {
+            returnObj.put("success",true);
+          }
+        }
+      });
+      pluginCall.resolve(returnObj);
+      return true;
     }
 
     /**
@@ -327,6 +412,7 @@ public class Chromecast extends Plugin {
      * @param callbackContext called with .success or .error depending on the result
      * @return true for cordova
      */
+    @PluginMethod
     public boolean addMessageListener(String namespace, CallbackContext callbackContext) {
         this.media.addMessageListener(namespace);
         callbackContext.success();

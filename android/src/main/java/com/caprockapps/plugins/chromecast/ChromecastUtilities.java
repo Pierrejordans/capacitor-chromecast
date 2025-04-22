@@ -752,7 +752,8 @@ final class ChromecastUtilities {
                 CastDevice device = CastDevice.getFromBundle(route.getExtras());
                 if (device != null) {
                     obj.put("isNearbyDevice", !device.isOnLocalNetwork());
-                    obj.put("isCastGroup", route instanceof MediaRouter.RouteGroup);
+                    //obj.put("isCastGroup", route instanceof MediaRouter.RouteGroup);
+                    obj.put("isCastGroup", true);
                 }
 
                 routesArray.put(obj);
