@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 
 import androidx.arch.core.util.Function;
 import androidx.mediarouter.app.MediaRouteChooserDialog;
@@ -25,7 +26,7 @@ import com.google.android.gms.cast.framework.Session;
 import com.google.android.gms.cast.framework.SessionManager;
 import com.google.android.gms.cast.framework.SessionManagerListener;
 
-import org.apache.cordova.CallbackContext;
+
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -92,31 +93,45 @@ public class ChromecastConnection {
      * @param pluginCall called when initialization is complete
      */
     public void initialize(final String applicationId, final PluginCall pluginCall) {
+        Log.d("ChromecastConnection", "Initializing with applicationId: " + applicationId);
         activity.runOnUiThread(new Runnable() {
             public void run() {
                 // If the app Id changed
                 if (applicationId == null || !applicationId.equals(appId)) {
+                    Log.d("ChromecastConnection", "App ID changed from '" + appId + "' to '" + applicationId + "'");
                     // If app Id is valid
                     if (isValidAppId(applicationId)) {
-                        // Set the new app Id
+                        // Set the new app Id IMMEDIATELY
                         setAppId(applicationId);
+                        Log.d("ChromecastConnection", "App ID set successfully to: " + applicationId);
+                        
+                        // Verify it was saved
+                        String savedAppId = settings.getString("appId", "NOT_FOUND");
+                        Log.d("ChromecastConnection", "Verified saved App ID: " + savedAppId);
+                        
                     } else {
+                        Log.e("ChromecastConnection", "Invalid app ID: " + applicationId);
                         // Else, just return
                         pluginCall.resolve();
                         return;
                     }
+                } else {
+                    Log.d("ChromecastConnection", "App ID unchanged: " + applicationId);
                 }
 
                 // Tell the client that initialization was a success
                 pluginCall.resolve();
+                Log.d("ChromecastConnection", "Initialization completed successfully");
 
                 // Check if there is any available receivers for 5 seconds
                 startRouteScan(5000L, new ScanCallback() {
                     @Override
                     void onRouteUpdate(List<RouteInfo> routes) {
+                        Log.d("ChromecastConnection", "Route scan found " + routes.size() + " routes");
                         // if the routes have changed, we may have an available device
                         // If there is at least one device available
                         if (getContext().getCastState() != CastState.NO_DEVICES_AVAILABLE) {
+                            Log.d("ChromecastConnection", "Cast devices are available, cast state: " + getContext().getCastState());
                             // Stop the scan
                             stopRouteScan(this, null);
                             // Let the client know a receiver is available
@@ -125,10 +140,15 @@ public class ChromecastConnection {
                             CastSession session = getSessionManager().getCurrentCastSession();
                             // If we do have a session
                             if (session != null) {
+                                Log.d("ChromecastConnection", "Found existing session: " + session.getSessionId());
                                 // Let the client know
                                 media.setSession(session);
                                 listener.onSessionRejoin(ChromecastUtilities.createSessionObject(session));
+                            } else {
+                                Log.d("ChromecastConnection", "No existing session found");
                             }
+                        } else {
+                            Log.d("ChromecastConnection", "No Cast devices available");
                         }
                     }
                 }, null);
@@ -152,10 +172,15 @@ public class ChromecastConnection {
         return getSessionManager().getCurrentCastSession();
     }
 
+    /**
+     * Set the app ID.
+     * @param applicationId application ID
+     */
     private void setAppId(String applicationId) {
+        Log.d("ChromecastConnection", "Setting app ID to: " + applicationId);
         this.appId = applicationId;
         this.settings.edit().putString("appId", appId).apply();
-        getContext().setReceiverApplicationId(appId);
+        Log.d("ChromecastConnection", "App ID saved to SharedPreferences: " + appId);
     }
 
     /**
@@ -325,10 +350,12 @@ public class ChromecastConnection {
      *                 or callback.error if an error occurred or if the dialog was dismissed
      */
     public void requestSession(final RequestSessionCallback callback) {
+        Log.d("ChromecastConnection", "requestSession called");
         activity.runOnUiThread(new Runnable() {
             public void run() {
                 CastSession session = getSession();
                 if (session == null) {
+                    Log.d("ChromecastConnection", "No existing session, showing device chooser dialog");
                     // show the "choose a connection" dialog
 
                     // Add the connection listener callback
@@ -344,12 +371,16 @@ public class ChromecastConnection {
                     builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
                         @Override
                         public void onCancel(DialogInterface dialog) {
+                            Log.d("ChromecastConnection", "Device chooser dialog was canceled");
                             getSessionManager().removeSessionManagerListener(newConnectionListener, CastSession.class);
                             callback.onCancel();
                         }
                     });
+                    Log.d("ChromecastConnection", "Showing device chooser dialog");
                     builder.show();
                 } else {
+                    Log.d("ChromecastConnection", "Existing session found: " + session.getSessionId() + 
+                        ", showing connection options dialog");
                     // We are are already connected, so show the "connection options" Dialog
                     AlertDialog.Builder builder = new AlertDialog.Builder(activity);
                     if (session.getCastDevice() != null) {
@@ -358,12 +389,14 @@ public class ChromecastConnection {
                     builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
                         @Override
                         public void onDismiss(DialogInterface dialog) {
+                            Log.d("ChromecastConnection", "Connection options dialog dismissed");
                             callback.onCancel();
                         }
                     });
                     builder.setPositiveButton("Stop Casting", new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
+                            Log.d("ChromecastConnection", "User chose to stop casting");
                             endSession(true, null);
                         }
                     });
@@ -383,24 +416,75 @@ public class ChromecastConnection {
         newConnectionListener = new SessionListener() {
             @Override
             public void onSessionStarted(CastSession castSession, String sessionId) {
+                Log.d("ChromecastConnection", "Session started successfully. SessionId: " + sessionId + ", Device: " + 
+                    (castSession.getCastDevice() != null ? castSession.getCastDevice().getFriendlyName() : "Unknown"));
                 getSessionManager().removeSessionManagerListener(this, CastSession.class);
                 media.setSession(castSession);
                 callback.onJoin(ChromecastUtilities.createSessionObject(castSession));
             }
             @Override
             public void onSessionStartFailed(CastSession castSession, int errCode) {
+                Log.e("ChromecastConnection", "Session start failed with error code: " + errCode + 
+                    ", Device: " + (castSession != null && castSession.getCastDevice() != null ? 
+                    castSession.getCastDevice().getFriendlyName() : "Unknown"));
+                    
+                // Log additional information about the device and context
+                if (castSession != null && castSession.getCastDevice() != null) {
+                    CastDevice device = castSession.getCastDevice();
+                    Log.d("ChromecastConnection", "Failed device info - " +
+                        "DeviceId: " + device.getDeviceId() + 
+                        ", DeviceVersion: " + device.getDeviceVersion() +
+                        ", ModelName: " + device.getModelName() +
+                        ", IsOnLocalNetwork: " + device.isOnLocalNetwork());
+                }
+                
+                // Check the current Cast context state
+                try {
+                    int castState = getContext().getCastState();
+                    Log.d("ChromecastConnection", "Current Cast state: " + castState);
+                } catch (Exception e) {
+                    Log.e("ChromecastConnection", "Error getting Cast state: " + e.getMessage());
+                }
+                
+                // Diagnostic spécifique pour l'erreur APPLICATION_NOT_FOUND (2475)
+                if (errCode == 2475) {
+                    Log.e("ChromecastConnection", "APPLICATION_NOT_FOUND error detected!");
+                    Log.e("ChromecastConnection", "This means the receiver app with ID '" + appId + "' cannot be found or loaded.");
+                    Log.e("ChromecastConnection", "Possible causes:");
+                    Log.e("ChromecastConnection", "1. Network connectivity issues on Chromecast device");
+                    Log.e("ChromecastConnection", "2. App ID is incorrect or not published");
+                    Log.e("ChromecastConnection", "3. Chromecast device not fully configured");
+                    Log.e("ChromecastConnection", "4. Regional restrictions");
+                    
+                    // Vérifications supplémentaires
+                    Log.d("ChromecastConnection", "App ID being used: " + appId);
+                    Log.d("ChromecastConnection", "Is Default Media Receiver? " + 
+                        (appId != null && appId.equals("CC1AD845")));
+                    
+                    // Test de connectivité de base
+                    if (castSession != null && castSession.getCastDevice() != null) {
+                        Log.d("ChromecastConnection", "Device appears to be reachable, issue is likely with app loading");
+                    } else {
+                        Log.e("ChromecastConnection", "Device information is not available, possible connection issue");
+                    }
+                }
+                
                 if (callback.onSessionStartFailed(errCode)) {
                     getSessionManager().removeSessionManagerListener(this, CastSession.class);
                 }
             }
             @Override
             public void onSessionEnded(CastSession castSession, int errCode) {
+                Log.w("ChromecastConnection", "Session ended before start with error code: " + errCode + 
+                    ", Device: " + (castSession != null && castSession.getCastDevice() != null ? 
+                    castSession.getCastDevice().getFriendlyName() : "Unknown"));
                 if (callback.onSessionEndedBeforeStart(errCode)) {
                     getSessionManager().removeSessionManagerListener(this, CastSession.class);
                 }
             }
         };
         getSessionManager().addSessionManagerListener(newConnectionListener, CastSession.class);
+        Log.d("ChromecastConnection", "Listening for connection with appId: " + appId);
     }
 
     /**
