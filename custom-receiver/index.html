@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Récepteur Chromecast HLS Sécurisé</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        #player {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        #debug {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .status {
+            color: #00ff00;
+        }
+        
+        .error {
+            color: #ff0000;
+        }
+        
+        .warning {
+            color: #ffaa00;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div>🎬 Récepteur HLS Sécurisé</div>
+        <div id="status" class="status">En attente...</div>
+    </div>
+    
+    <div id="player"></div>
+    
+    <div id="debug">
+        <div><strong>Debug:</strong></div>
+        <div id="debug-content">Aucune information</div>
+    </div>
+
+    <!-- Google Cast Framework -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    
+    <script>
+        // Configuration du récepteur
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const playerManager = context.getPlayerManager();
+        
+        // Variables globales pour le debug
+        let currentAuthToken = null;
+        let debugElement = document.getElementById('debug-content');
+        let statusElement = document.getElementById('status');
+        
+        // Fonction utilitaire pour logger
+        function log(message, type = 'info') {
+            console.log(`[HLS-RECEIVER] ${message}`);
+            const now = new Date().toLocaleTimeString();
+            debugElement.innerHTML = `[${now}] ${message}<br>` + debugElement.innerHTML.split('<br>').slice(0, 5).join('<br>');
+            
+            if (type === 'status') {
+                statusElement.textContent = message;
+                statusElement.className = 'status';
+            } else if (type === 'error') {
+                statusElement.textContent = message;
+                statusElement.className = 'error';
+            } else if (type === 'warning') {
+                statusElement.textContent = message;
+                statusElement.className = 'warning';
+            }
+        }
+        
+        // Intercepter les requêtes LOAD pour extraire le token
+        playerManager.setMessageInterceptor(
+            cast.framework.messages.MessageType.LOAD,
+            (loadRequestData) => {
+                log('📨 Requête LOAD reçue', 'status');
+                
+                // Extraire les données personnalisées
+                const customData = loadRequestData.customData || {};
+                log(`🔍 CustomData: ${JSON.stringify(customData)}`);
+                
+                // Extraire le token d'authentification
+                currentAuthToken = customData.authToken || null;
+                
+                if (currentAuthToken) {
+                    log(`🔑 Token d'authentification détecté`, 'status');
+                    
+                    // Extraire le token de l'URL si pas dans customData
+                    if (!currentAuthToken && loadRequestData.media && loadRequestData.media.contentId) {
+                        const url = loadRequestData.media.contentId;
+                        const tokenMatch = url.match(/[?&]token=([^&]+)/);
+                        if (tokenMatch) {
+                            currentAuthToken = tokenMatch[1];
+                            log(`🔑 Token extrait de l'URL`);
+                        }
+                    }
+                } else {
+                    log(`⚠️ Aucun token d'authentification trouvé`, 'warning');
+                }
+                
+                // Modifier l'URL du média si nécessaire
+                if (loadRequestData.media && loadRequestData.media.contentId) {
+                    const originalUrl = loadRequestData.media.contentId;
+                    log(`🎬 Média original: ${originalUrl}`);
+                    
+                    // Vérifier si c'est un flux HLS
+                    if (originalUrl.includes('.m3u8')) {
+                        log(`🎥 Flux HLS détecté`);
+                        
+                        // Configurer le type de média approprié
+                        loadRequestData.media.contentType = 'application/x-mpegURL';
+                        loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
+                        
+                        log(`✅ Configuration HLS appliquée`);
+                    }
+                }
+                
+                return loadRequestData;
+            }
+        );
+        
+        // Intercepter les erreurs de chargement
+        playerManager.addEventListener(
+            cast.framework.events.EventType.ERROR,
+            (event) => {
+                log(`❌ Erreur: ${event.detailedErrorCode || event.error}`, 'error');
+            }
+        );
+        
+        // Intercepter les changements d'état du player
+        playerManager.addEventListener(
+            cast.framework.events.EventType.PLAYER_STATE_CHANGED,
+            (event) => {
+                const state = event.playerState;
+                log(`🎮 État du player: ${state}`, 'status');
+                
+                if (state === cast.framework.messages.PlayerState.PLAYING) {
+                    log(`▶️ Lecture en cours`, 'status');
+                } else if (state === cast.framework.messages.PlayerState.BUFFERING) {
+                    log(`⏳ Mise en mémoire tampon...`, 'status');
+                } else if (state === cast.framework.messages.PlayerState.IDLE) {
+                    log(`⏹️ Player en veille`, 'status');
+                }
+            }
+        );
+        
+        // Intercepter le chargement des médias
+        playerManager.addEventListener(
+            cast.framework.events.EventType.MEDIA_STATUS_CHANGED,
+            (event) => {
+                log(`📺 Statut média changé`);
+            }
+        );
+        
+        // FONCTIONNALITÉ PRINCIPALE : Intercepter les requêtes réseau pour ajouter le token
+        // Cette partie est cruciale pour l'authentification HLS
+        const originalXMLHttpRequest = window.XMLHttpRequest;
+        const originalFetch = window.fetch;
+        
+        // Intercepter XMLHttpRequest (utilisé par certains players HLS)
+        window.XMLHttpRequest = function() {
+            const xhr = new originalXMLHttpRequest();
+            const originalOpen = xhr.open;
+            
+            xhr.open = function(method, url, async, user, password) {
+                // Vérifier si c'est une requête de segment HLS
+                if (currentAuthToken && (url.includes('.ts') || url.includes('.m4s') || url.includes('.m3u8'))) {
+                    // Ajouter le token à l'URL si pas déjà présent
+                    if (!url.includes('token=')) {
+                        const separator = url.includes('?') ? '&' : '?';
+                        url = `${url}${separator}token=${currentAuthToken}`;
+                        log(`🔗 Token ajouté à: ${url.split('?')[0]}`);
+                    }
+                }
+                
+                return originalOpen.call(this, method, url, async, user, password);
+            };
+            
+            return xhr;
+        };
+        
+        // Intercepter fetch (API moderne)
+        window.fetch = function(input, init = {}) {
+            let url = typeof input === 'string' ? input : input.url;
+            
+            // Vérifier si c'est une requête de segment HLS
+            if (currentAuthToken && (url.includes('.ts') || url.includes('.m4s') || url.includes('.m3u8'))) {
+                // Ajouter le token à l'URL si pas déjà présent
+                if (!url.includes('token=')) {
+                    const separator = url.includes('?') ? '&' : '?';
+                    url = `${url}${separator}token=${currentAuthToken}`;
+                    log(`🔗 Token ajouté à: ${url.split('?')[0]}`);
+                }
+                
+                // Mettre à jour l'URL
+                if (typeof input === 'string') {
+                    input = url;
+                } else {
+                    input = new Request(url, input);
+                }
+            }
+            
+            return originalFetch.call(this, input, init);
+        };
+        
+        // Configuration des options du récepteur
+        const options = new cast.framework.CastReceiverOptions();
+        
+        // Configurer le timeout de déconnexion (optionnel)
+        options.disableIdleTimeout = false;
+        options.maxInactivity = 3600; // 1 heure
+        
+        // Ajouter des namespaces personnalisés si nécessaire
+        options.customNamespaces = {};
+        
+        // Démarrer le récepteur
+        context.start(options);
+        
+        log('🚀 Récepteur HLS sécurisé démarré', 'status');
+        
+        // Debug: Afficher les informations système
+        setTimeout(() => {
+            const systemInfo = context.getSystemInfo();
+            log(`📱 Système: ${systemInfo.displayName || 'Chromecast'}`);
+        }, 1000);
+        
+    </script>
+</body>
+</html> 

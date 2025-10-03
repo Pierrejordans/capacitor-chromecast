@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test du Récepteur HLS Sécurisé</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        input[type="url"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        
+        .logs {
+            background: #222;
+            color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .test-urls {
+            margin: 15px 0;
+        }
+        
+        .test-url {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test du Récepteur HLS Sécurisé</h1>
+        
+        <div id="status" class="status info">
+            ℹ️ Initialisation en cours...
+        </div>
+        
+        <div>
+            <h3>🎯 Test avec votre URL</h3>
+            <input type="url" id="testUrl" placeholder="https://example.com/stream.m3u8?token=xxx" />
+            <input type="text" id="testToken" placeholder="Token d'authentification (optionnel)" />
+            <button onclick="testCustomUrl()">Tester cette URL</button>
+        </div>
+        
+        <div class="test-urls">
+            <h3>🔗 URLs de test</h3>
+            <div class="test-url">
+                <strong>HLS Simple (sans auth) :</strong><br>
+                <code>https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8</code>
+                <button onclick="testUrl('https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8', null)">Tester</button>
+            </div>
+            <div class="test-url">
+                <strong>Simuler URL avec token :</strong><br>
+                <code>https://example.com/stream.m3u8?token=test123</code>
+                <button onclick="testUrl('https://example.com/stream.m3u8?token=test123', 'test123')">Tester</button>
+            </div>
+        </div>
+        
+        <div>
+            <h3>⚙️ Actions</h3>
+            <button onclick="initializeCast()">Réinitialiser Cast</button>
+            <button onclick="requestSession()">Demander Session</button>
+            <button onclick="stopSession()">Arrêter Session</button>
+            <button onclick="clearLogs()">Effacer Logs</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h3>📝 Logs</h3>
+        <div id="logs" class="logs">En attente des logs...</div>
+    </div>
+    
+    <!-- Google Cast Web SDK -->
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    
+    <script>
+        let cast, session, mediaSession;
+        let logsContainer = document.getElementById('logs');
+        let statusContainer = document.getElementById('status');
+        
+        // URL de votre récepteur personnalisé (à modifier)
+        const CUSTOM_RECEIVER_APP_ID = 'CC1AD845'; // Remplacez par votre App ID
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            logsContainer.textContent += logMessage;
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            console.log(message);
+        }
+        
+        function setStatus(message, type = 'info') {
+            statusContainer.textContent = message;
+            statusContainer.className = `status ${type}`;
+        }
+        
+        function clearLogs() {
+            logsContainer.textContent = '';
+            log('Logs effacés');
+        }
+        
+        // Initialisation de Google Cast
+        window['__onGCastApiAvailable'] = function(isAvailable) {
+            if (isAvailable) {
+                cast = window.chrome.cast;
+                log('✅ Google Cast API disponible');
+                initializeCast();
+            } else {
+                log('❌ Google Cast API non disponible');
+                setStatus('❌ Google Cast API non disponible', 'error');
+            }
+        };
+        
+        function initializeCast() {
+            log('🔄 Initialisation de Google Cast...');
+            
+            const sessionRequest = new cast.SessionRequest(CUSTOM_RECEIVER_APP_ID);
+            const apiConfig = new cast.ApiConfig(
+                sessionRequest,
+                sessionListener,
+                receiverListener,
+                cast.AutoJoinPolicy.ORIGIN_SCOPED
+            );
+            
+            cast.initialize(
+                apiConfig,
+                () => {
+                    log('✅ Google Cast initialisé avec succès');
+                    setStatus('✅ Google Cast prêt - Recherchez des appareils', 'success');
+                },
+                (error) => {
+                    log(`❌ Erreur d'initialisation: ${error.description}`);
+                    setStatus(`❌ Erreur: ${error.description}`, 'error');
+                }
+            );
+        }
+        
+        function sessionListener(session) {
+            log(`🔗 Session créée: ${session.sessionId}`);
+            setStatus('🔗 Session Chromecast active', 'success');
+            window.session = session;
+            
+            session.addUpdateListener((isAlive) => {
+                log(`📱 Session ${isAlive ? 'active' : 'fermée'}`);
+                if (!isAlive) {
+                    setStatus('📱 Session fermée', 'info');
+                    window.session = null;
+                }
+            });
+            
+            session.addMessageListener(
+                'urn:x-cast:com.google.cast.media',
+                (namespace, message) => {
+                    log(`📨 Message reçu: ${message}`);
+                }
+            );
+        }
+        
+        function receiverListener(availability) {
+            if (availability === cast.ReceiverAvailability.AVAILABLE) {
+                log('📡 Appareils Chromecast détectés');
+                setStatus('📡 Appareils Chromecast disponibles', 'success');
+            } else {
+                log('🔍 Aucun appareil Chromecast détecté');
+                setStatus('🔍 Recherche d\'appareils...', 'info');
+            }
+        }
+        
+        function requestSession() {
+            log('🎯 Demande de session...');
+            cast.requestSession(
+                sessionListener,
+                (error) => {
+                    log(`❌ Erreur de session: ${error.description}`);
+                    setStatus(`❌ Erreur de session: ${error.description}`, 'error');
+                }
+            );
+        }
+        
+        function stopSession() {
+            if (window.session) {
+                log('🛑 Arrêt de la session...');
+                window.session.stop(
+                    () => {
+                        log('✅ Session arrêtée');
+                        setStatus('✅ Session arrêtée', 'info');
+                        window.session = null;
+                    },
+                    (error) => {
+                        log(`❌ Erreur d'arrêt: ${error.description}`);
+                    }
+                );
+            } else {
+                log('⚠️ Aucune session active');
+                setStatus('⚠️ Aucune session active', 'info');
+            }
+        }
+        
+        function testUrl(url, token) {
+            if (!window.session) {
+                log('❌ Aucune session active. Créez d\'abord une session.');
+                setStatus('❌ Créez d\'abord une session Chromecast', 'error');
+                return;
+            }
+            
+            log(`🎬 Test de l'URL: ${url}`);
+            if (token) {
+                log(`🔑 Token fourni: ${token.substring(0, 10)}...`);
+            }
+            
+            // Créer MediaInfo
+            const mediaInfo = new cast.media.MediaInfo(url, 'application/x-mpegURL');
+            
+            // Ajouter le token aux customData
+            mediaInfo.customData = {
+                authToken: token,
+                secureHLS: true,
+                testMode: true,
+                timestamp: Date.now()
+            };
+            
+            // Ajouter des métadonnées
+            mediaInfo.metadata = new cast.media.GenericMediaMetadata();
+            mediaInfo.metadata.title = 'Test HLS Sécurisé';
+            mediaInfo.metadata.subtitle = token ? 'Avec authentification' : 'Sans authentification';
+            
+            // Configuration du stream
+            mediaInfo.streamType = cast.media.StreamType.LIVE;
+            
+            const request = new cast.media.LoadRequest(mediaInfo);
+            request.autoplay = true;
+            
+            log('📤 Envoi de la requête au récepteur...');
+            
+            window.session.loadMedia(
+                request,
+                (mediaSession) => {
+                    log('✅ Média chargé avec succès');
+                    setStatus('✅ Média en cours de lecture', 'success');
+                    window.mediaSession = mediaSession;
+                    
+                    mediaSession.addUpdateListener((isAlive) => {
+                        if (isAlive) {
+                            const state = mediaSession.playerState;
+                            log(`🎮 État du player: ${state}`);
+                            
+                            if (state === cast.media.PlayerState.PLAYING) {
+                                setStatus('▶️ Lecture en cours', 'success');
+                            } else if (state === cast.media.PlayerState.BUFFERING) {
+                                setStatus('⏳ Mise en mémoire tampon...', 'info');
+                            } else if (state === cast.media.PlayerState.IDLE) {
+                                const reason = mediaSession.idleReason;
+                                log(`⏹️ Player en veille: ${reason}`);
+                                if (reason === cast.media.IdleReason.ERROR) {
+                                    setStatus('❌ Erreur de lecture', 'error');
+                                }
+                            }
+                        }
+                    });
+                },
+                (error) => {
+                    log(`❌ Erreur de chargement: ${error.description}`);
+                    setStatus(`❌ Erreur de chargement: ${error.description}`, 'error');
+                }
+            );
+        }
+        
+        function testCustomUrl() {
+            const url = document.getElementById('testUrl').value;
+            const token = document.getElementById('testToken').value;
+            
+            if (!url) {
+                alert('Veuillez entrer une URL');
+                return;
+            }
+            
+            // Extraire le token de l'URL si pas fourni séparément
+            let finalToken = token;
+            if (!finalToken && url.includes('token=')) {
+                const match = url.match(/[?&]token=([^&]+)/);
+                if (match) {
+                    finalToken = match[1];
+                    log(`🔍 Token extrait de l'URL: ${finalToken.substring(0, 10)}...`);
+                }
+            }
+            
+            testUrl(url, finalToken);
+        }
+        
+        // Initialiser au chargement de la page
+        log('🚀 Page de test chargée');
+        setStatus('🔄 Chargement de Google Cast API...', 'info');
+    </script>
+</body>
+</html> 

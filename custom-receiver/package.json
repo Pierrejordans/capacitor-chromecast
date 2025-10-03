@@ -1,0 +1,38 @@
+{
+  "name": "chromecast-hls-secure-receiver",
+  "version": "1.0.0",
+  "description": "Récepteur Chromecast personnalisé pour flux HLS sécurisés avec authentification par token",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1 --cors",
+    "start:https": "npx http-server -p 8443 -S -c-1 --cors",
+    "test": "npx http-server -p 8080 -c-1 --cors -o test.html",
+    "tunnel": "npx ngrok http 8080",
+    "deploy:netlify": "npx netlify deploy --prod --dir=.",
+    "validate": "node validate.js"
+  },
+  "keywords": [
+    "chromecast",
+    "hls",
+    "authentication",
+    "secure",
+    "streaming",
+    "receiver",
+    "cast"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "ngrok": "^5.0.0",
+    "netlify-cli": "^17.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/chromecast-hls-receiver.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/chromecast-hls-receiver/issues"
+  },
+  "homepage": "https://github.com/your-username/chromecast-hls-receiver#readme"
+} 

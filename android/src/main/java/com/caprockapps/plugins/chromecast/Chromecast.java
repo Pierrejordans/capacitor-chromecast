@@ -426,6 +426,84 @@ public class Chromecast extends Plugin {
 
         this.connection.getChromecastSession().loadMedia(contentId, customData, contentType, duration, streamType, autoPlay, currentTime, metadata, textTrackStyle, pluginCall);
     }
+    
+    /**
+     * Méthode pour charger un média avec des en-têtes d'authentification personnalisés.
+     * Cette méthode permet de passer des tokens d'authentification et des headers personnalisés.
+     * 
+     * @param pluginCall contient les paramètres suivants :
+     *                   - contentId : l'URL du média
+     *                   - customData : données personnalisées (optionnel)
+     *                   - contentType : type MIME du contenu (optionnel, détecté automatiquement)
+     *                   - duration : durée du média en secondes (optionnel)
+     *                   - streamType : type de stream (optionnel, détecté automatiquement)
+     *                   - autoPlay : lecture automatique (optionnel, défaut : false)
+     *                   - currentTime : position de départ en secondes (optionnel, défaut : 0)
+     *                   - metadata : métadonnées du média (optionnel)
+     *                   - textTrackStyle : style des sous-titres (optionnel)
+     *                   - authHeaders : en-têtes d'authentification (optionnel)
+     *                   - authToken : token d'authentification à ajouter aux customData (optionnel)
+     */
+    @PluginMethod
+    public void loadMediaWithHeaders(final PluginCall pluginCall) {
+        String contentId = pluginCall.getString("contentId");
+        JSObject customData = pluginCall.getObject("customData", new JSObject());
+        String contentType = pluginCall.getString("contentType", "");
+        Integer duration = pluginCall.getInt("duration", 0);
+        String streamType = pluginCall.getString("streamType", "");
+        Boolean autoPlay = pluginCall.getBoolean("autoPlay", false);
+        Integer currentTime = pluginCall.getInt("currentTime", 0);
+        JSObject metadata = pluginCall.getObject("metadata", new JSObject());
+        JSObject textTrackStyle = pluginCall.getObject("textTrackStyle", new JSObject());
+        JSObject authHeaders = pluginCall.getObject("authHeaders", new JSObject());
+        String authToken = pluginCall.getString("authToken", "");
+
+        // Ajouter les en-têtes d'authentification aux customData
+        if (authHeaders != null && authHeaders.length() > 0) {
+            try {
+                customData.put("authHeaders", authHeaders);
+                Log.d(TAG, "Added auth headers to customData: " + authHeaders.toString());
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to add auth headers to customData", e);
+            }
+        }
+        
+        // Ajouter le token d'authentification aux customData
+        if (authToken != null && !authToken.isEmpty()) {
+            try {
+                customData.put("authToken", authToken);
+                Log.d(TAG, "Added auth token to customData");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to add auth token to customData", e);
+            }
+        }
+
+        // Détection automatique du contentType si non spécifié ou incorrect
+        String detectedContentType = detectContentType(contentId, contentType);
+        if (!detectedContentType.equals(contentType)) {
+            Log.d(TAG, "ContentType corrigé de '" + contentType + "' vers '" + detectedContentType + "'");
+            contentType = detectedContentType;
+        }
+        
+        // Ajustement du streamType pour HLS
+        if (detectedContentType.equals("application/x-mpegURL") && (streamType == null || streamType.isEmpty())) {
+            streamType = "LIVE";
+            Log.d(TAG, "StreamType défini sur LIVE pour le stream HLS");
+        }
+        
+        // Logging pour diagnostic
+        Log.d(TAG, "=== LOAD MEDIA WITH HEADERS DEBUG ===");
+        Log.d(TAG, "contentId: " + contentId);
+        Log.d(TAG, "contentType: " + contentType);
+        Log.d(TAG, "streamType: " + streamType);
+        Log.d(TAG, "autoPlay: " + autoPlay);
+        Log.d(TAG, "duration: " + duration);
+        Log.d(TAG, "currentTime: " + currentTime);
+        Log.d(TAG, "customData: " + customData.toString());
+        Log.d(TAG, "=====================================");
+
+        this.connection.getChromecastSession().loadMedia(contentId, customData, contentType, duration, streamType, autoPlay, currentTime, metadata, textTrackStyle, pluginCall);
+    }
 
     /**
      * Méthode simplifiée pour lancer un média avec des paramètres par défaut.
@@ -814,14 +892,21 @@ public class Chromecast extends Plugin {
             return providedContentType != null ? providedContentType : "video/mp4";
         }
         
-        // Nettoie l'URL pour enlever les paramètres de requête
+        // Nettoie l'URL pour enlever les paramètres de requête SEULEMENT pour la détection
+        // L'URL originale avec les tokens sera préservée lors du chargement du média
         String baseUrl = url.split("\\?")[0].toLowerCase();
         
         if (baseUrl.endsWith(".m3u8")) {
             Log.d(TAG, "Detected HLS stream (.m3u8) - using application/x-mpegURL");
+            if (url.contains("token=") || url.contains("?") || url.contains("&")) {
+                Log.d(TAG, "HLS stream with authentication tokens detected - tokens will be preserved");
+            }
             return "application/x-mpegURL";
         } else if (baseUrl.endsWith(".mpd")) {
             Log.d(TAG, "Detected DASH stream (.mpd) - using application/dash+xml");
+            if (url.contains("token=") || url.contains("?") || url.contains("&")) {
+                Log.d(TAG, "DASH stream with authentication tokens detected - tokens will be preserved");
+            }
             return "application/dash+xml";
         } else if (baseUrl.endsWith(".mp4")) {
             Log.d(TAG, "Detected MP4 video - using video/mp4");
@@ -1103,5 +1188,104 @@ public class Chromecast extends Plugin {
         result.put("testSteps", steps);
         
         pluginCall.resolve(result);
+    }
+
+    /**
+     * Méthode pour charger un média HLS sécurisé en utilisant un récepteur personnalisé
+     * qui peut gérer l'authentification des segments HLS
+     * 
+     * @param pluginCall contient les paramètres du média et l'App ID du récepteur personnalisé
+     */
+    @PluginMethod
+    public void loadSecureHLS(final PluginCall pluginCall) {
+        String contentId = pluginCall.getString("contentId");
+        String customAppId = pluginCall.getString("customAppId");
+        JSObject customData = pluginCall.getObject("customData", new JSObject());
+        String contentType = pluginCall.getString("contentType", "application/x-mpegURL");
+        String streamType = pluginCall.getString("streamType", "LIVE");
+        Boolean autoPlay = pluginCall.getBoolean("autoPlay", true);
+        JSObject metadata = pluginCall.getObject("metadata", new JSObject());
+        String authToken = pluginCall.getString("authToken", "");
+
+        if (contentId == null || contentId.isEmpty()) {
+            pluginCall.reject("contentId est requis");
+            return;
+        }
+
+        // Extraire le token de l'URL si présent
+        if (authToken.isEmpty() && contentId.contains("token=")) {
+            try {
+                String[] urlParts = contentId.split("\\?");
+                if (urlParts.length > 1) {
+                    String[] params = urlParts[1].split("&");
+                    for (String param : params) {
+                        if (param.startsWith("token=")) {
+                            authToken = param.substring(6);
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to extract token from URL", e);
+            }
+        }
+
+        // Ajouter les informations d'authentification aux customData
+        try {
+            customData.put("authToken", authToken);
+            customData.put("secureHLS", true);
+            customData.put("originalUrl", contentId);
+            
+            // Ajouter les informations pour le récepteur personnalisé
+            customData.put("authType", "url_token");
+            customData.put("contentType", contentType);
+            
+            Log.d(TAG, "=== SECURE HLS DEBUG ===");
+            Log.d(TAG, "contentId: " + contentId);
+            Log.d(TAG, "authToken: " + (authToken.isEmpty() ? "EMPTY" : "PRESENT"));
+            Log.d(TAG, "customAppId: " + customAppId);
+            Log.d(TAG, "customData: " + customData.toString());
+            Log.d(TAG, "========================");
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to prepare secure HLS data", e);
+            pluginCall.reject("Failed to prepare secure HLS data: " + e.getMessage());
+            return;
+        }
+
+        // Note: Pour l'instant, nous n'utilisons pas l'App ID personnalisé
+        // car cela nécessite une réinitialisation complète de la connexion
+        // TODO: Implémenter le support pour les App IDs personnalisés
+        if (customAppId != null && !customAppId.isEmpty()) {
+            Log.d(TAG, "Custom App ID provided but not implemented yet: " + customAppId);
+            Log.d(TAG, "Using default receiver with custom data for secure HLS");
+        }
+        
+        // Utiliser le récepteur par défaut avec les données personnalisées
+        loadMediaWithCustomData(contentId, customData, contentType, streamType, autoPlay, metadata, pluginCall);
+    }
+    
+    /**
+     * Méthode helper pour charger un média avec des données personnalisées
+     */
+    private void loadMediaWithCustomData(String contentId, JSObject customData, String contentType, 
+                                       String streamType, boolean autoPlay, JSObject metadata, PluginCall pluginCall) {
+        try {
+            this.connection.getChromecastSession().loadMedia(
+                contentId, 
+                customData, 
+                contentType, 
+                0L, // duration
+                streamType, 
+                autoPlay, 
+                0.0, // currentTime
+                metadata, 
+                new JSObject(), // textTrackStyle
+                pluginCall
+            );
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to load media with custom data", e);
+            pluginCall.reject("Failed to load media: " + e.getMessage());
+        }
     }
 }

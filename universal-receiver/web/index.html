@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Récepteur Universel HLS Sécurisé</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        
+        #video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #video-player {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        #device-info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+            font-size: 14px;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            padding: 15px 25px;
+            border-radius: 25px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        #controls.visible {
+            opacity: 1;
+        }
+        
+        .control-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        #progress-bar {
+            width: 200px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        #progress-fill {
+            height: 100%;
+            background: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        #debug-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #FF9800;
+            font-size: 12px;
+            font-family: monospace;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            opacity: 0.7;
+        }
+        
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255,255,255,0.3);
+            border-top: 6px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .device-chromecast { border-left-color: #4285F4; }
+        .device-android-tv { border-left-color: #34A853; }
+        .device-smart-tv { border-left-color: #EA4335; }
+        .device-web { border-left-color: #FBBC05; }
+        
+        .status-playing { color: #4CAF50; }
+        .status-buffering { color: #FF9800; }
+        .status-error { color: #F44336; }
+        .status-idle { color: #9E9E9E; }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div id="loading-text">Initialisation du récepteur universel...</div>
+    </div>
+    
+    <div id="video-container">
+        <video id="video-player" preload="metadata" muted playsinline></video>
+    </div>
+    
+    <div id="device-info">
+        <div><strong>🎬 Récepteur Universel HLS</strong></div>
+        <div id="device-type">Détection en cours...</div>
+        <div id="device-status" class="status-idle">En attente</div>
+        <div id="stream-info"></div>
+    </div>
+    
+    <div id="controls">
+        <button class="control-btn" id="play-pause-btn">⏸️</button>
+        <div id="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+        <button class="control-btn" id="volume-btn">🔊</button>
+        <button class="control-btn" id="fullscreen-btn">⛶</button>
+    </div>
+    
+    <div id="debug-panel">
+        <div><strong>Debug Logs:</strong></div>
+        <div id="debug-logs">Démarrage...</div>
+    </div>
+
+    <!-- Google Cast Framework (conditionnel) -->
+    <script>
+        // Détection d'environnement
+        const Environment = {
+            isChromecast: () => window.navigator.userAgent.includes('CrKey'),
+            isAndroidTV: () => window.navigator.userAgent.includes('Android') && window.navigator.userAgent.includes('TV'),
+            isSmartTV: () => window.navigator.userAgent.includes('SmartTV') || window.navigator.userAgent.includes('Tizen'),
+            isWebBrowser: () => !Environment.isChromecast() && !Environment.isAndroidTV() && !Environment.isSmartTV()
+        };
+
+        // Chargement conditionnel du SDK Google Cast
+        if (Environment.isChromecast()) {
+            const script = document.createElement('script');
+            script.src = 'https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js';
+            script.onload = () => initializeChromecast();
+            document.head.appendChild(script);
+        } else {
+            initializeNativePlayer();
+        }
+    </script>
+    
+    <script>
+        // Variables globales
+        let currentEnvironment = null;
+        let currentAuthToken = null;
+        let videoPlayer = null;
+        let debugLogs = [];
+        let currentStream = null;
+        let castContext = null;
+        let playerManager = null;
+        
+        // Éléments DOM
+        const deviceInfo = document.getElementById('device-info');
+        const deviceType = document.getElementById('device-type');
+        const deviceStatus = document.getElementById('device-status');
+        const streamInfo = document.getElementById('stream-info');
+        const debugPanel = document.getElementById('debug-logs');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const controls = document.getElementById('controls');
+        const videoElement = document.getElementById('video-player');
+        
+        // Fonction de logging universelle
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            
+            console.log(logEntry);
+            debugLogs.push(logEntry);
+            
+            // Garder seulement les 20 derniers logs
+            if (debugLogs.length > 20) {
+                debugLogs.shift();
+            }
+            
+            // Mettre à jour l'affichage
+            debugPanel.innerHTML = debugLogs.join('<br>');
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
+        
+        // Fonction de mise à jour du statut
+        function updateStatus(status, type = 'info') {
+            deviceStatus.textContent = status;
+            deviceStatus.className = `status-${type}`;
+            log(`Status: ${status}`, type);
+        }
+        
+        // Fonction de mise à jour des informations de stream
+        function updateStreamInfo(info) {
+            streamInfo.innerHTML = info;
+        }
+        
+        // Détection et initialisation de l'environnement
+        function detectEnvironment() {
+            if (Environment.isChromecast()) {
+                currentEnvironment = 'chromecast';
+                deviceType.textContent = '📡 Google Chromecast';
+                deviceInfo.className = 'device-chromecast';
+                return 'chromecast';
+            } else if (Environment.isAndroidTV()) {
+                currentEnvironment = 'android-tv';
+                deviceType.textContent = '📺 Android TV';
+                deviceInfo.className = 'device-android-tv';
+                return 'android-tv';
+            } else if (Environment.isSmartTV()) {
+                currentEnvironment = 'smart-tv';
+                deviceType.textContent = '📱 Smart TV';
+                deviceInfo.className = 'device-smart-tv';
+                return 'smart-tv';
+            } else {
+                currentEnvironment = 'web';
+                deviceType.textContent = '🌐 Navigateur Web';
+                deviceInfo.className = 'device-web';
+                return 'web';
+            }
+        }
+        
+        // Initialisation Chromecast
+        function initializeChromecast() {
+            log('Initialisation du récepteur Chromecast...');
+            
+            try {
+                castContext = cast.framework.CastReceiverContext.getInstance();
+                playerManager = castContext.getPlayerManager();
+                
+                // Intercepter les requêtes LOAD
+                playerManager.setMessageInterceptor(
+                    cast.framework.messages.MessageType.LOAD,
+                    (loadRequestData) => {
+                        log('📨 Requête LOAD reçue (Chromecast)');
+                        return handleLoadRequest(loadRequestData);
+                    }
+                );
+                
+                // Événements du player
+                playerManager.addEventListener(
+                    cast.framework.events.EventType.PLAYER_STATE_CHANGED,
+                    handlePlayerStateChange
+                );
+                
+                playerManager.addEventListener(
+                    cast.framework.events.EventType.ERROR,
+                    handlePlayerError
+                );
+                
+                // Options du récepteur
+                const options = new cast.framework.CastReceiverOptions();
+                options.disableIdleTimeout = false;
+                options.maxInactivity = 3600;
+                
+                // Démarrer le récepteur
+                castContext.start(options);
+                
+                // Configurer les interceptions réseau
+                setupNetworkInterception();
+                
+                log('✅ Récepteur Chromecast initialisé');
+                updateStatus('Récepteur Chromecast prêt', 'idle');
+                
+            } catch (error) {
+                log(`❌ Erreur initialisation Chromecast: ${error.message}`, 'error');
+                updateStatus('Erreur d\'initialisation', 'error');
+            }
+            
+            hideLoading();
+        }
+        
+        // Initialisation player natif
+        function initializeNativePlayer() {
+            log(`Initialisation du player natif (${currentEnvironment})...`);
+            
+            videoPlayer = videoElement;
+            
+            // Événements du player vidéo
+            videoPlayer.addEventListener('loadstart', () => {
+                log('🎬 Début du chargement vidéo');
+                updateStatus('Chargement...', 'buffering');
+            });
+            
+            videoPlayer.addEventListener('loadedmetadata', () => {
+                log('📊 Métadonnées chargées');
+                updateStreamInfo(`Durée: ${formatTime(videoPlayer.duration)}<br>Résolution: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}`);
+            });
+            
+            videoPlayer.addEventListener('canplay', () => {
+                log('✅ Prêt à jouer');
+                updateStatus('Prêt à jouer', 'idle');
+            });
+            
+            videoPlayer.addEventListener('playing', () => {
+                log('▶️ Lecture en cours');
+                updateStatus('Lecture en cours', 'playing');
+                showControls();
+            });
+            
+            videoPlayer.addEventListener('pause', () => {
+                log('⏸️ Pause');
+                updateStatus('En pause', 'idle');
+            });
+            
+            videoPlayer.addEventListener('waiting', () => {
+                log('⏳ Mise en mémoire tampon...');
+                updateStatus('Mise en mémoire tampon...', 'buffering');
+            });
+            
+            videoPlayer.addEventListener('error', (e) => {
+                log(`❌ Erreur vidéo: ${e.message}`, 'error');
+                updateStatus('Erreur de lecture', 'error');
+            });
+            
+            videoPlayer.addEventListener('ended', () => {
+                log('🏁 Fin de la lecture');
+                updateStatus('Lecture terminée', 'idle');
+            });
+            
+            // Configurer les interceptions réseau
+            setupNetworkInterception();
+            
+            // Configurer les contrôles
+            setupControls();
+            
+            log('✅ Player natif initialisé');
+            updateStatus('Player natif prêt', 'idle');
+            
+            hideLoading();
+        }
+        
+        // Gestion des requêtes LOAD
+        function handleLoadRequest(loadRequestData) {
+            log('🔍 Traitement de la requête LOAD...');
+            
+            // Extraire les données personnalisées
+            const customData = loadRequestData.customData || {};
+            currentAuthToken = customData.authToken || null;
+            
+            if (currentAuthToken) {
+                log('🔑 Token d\'authentification détecté');
+            } else {
+                // Essayer d'extraire le token de l'URL
+                const url = loadRequestData.media.contentId;
+                const tokenMatch = url.match(/[?&]token=([^&]+)/);
+                if (tokenMatch) {
+                    currentAuthToken = tokenMatch[1];
+                    log('🔑 Token extrait de l\'URL');
+                }
+            }
+            
+            // Informations sur le stream
+            const mediaInfo = loadRequestData.media;
+            currentStream = {
+                url: mediaInfo.contentId,
+                type: mediaInfo.contentType,
+                title: mediaInfo.metadata?.title || 'Stream sans titre',
+                duration: mediaInfo.duration || 0
+            };
+            
+            log(`🎬 Stream: ${currentStream.title}`);
+            log(`🔗 URL: ${currentStream.url}`);
+            
+            // Configurer le type de média approprié
+            if (currentStream.url.includes('.m3u8')) {
+                loadRequestData.media.contentType = 'application/x-mpegURL';
+                loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
+                log('🎥 Type HLS configuré');
+            }
+            
+            updateStreamInfo(`Titre: ${currentStream.title}<br>Type: ${currentStream.type}`);
+            
+            return loadRequestData;
+        }
+        
+        // Gestion des changements d'état du player
+        function handlePlayerStateChange(event) {
+            const state = event.playerState;
+            log(`🎮 État du player: ${state}`);
+            
+            switch (state) {
+                case cast.framework.messages.PlayerState.PLAYING:
+                    updateStatus('Lecture en cours', 'playing');
+                    showControls();
+                    break;
+                case cast.framework.messages.PlayerState.PAUSED:
+                    updateStatus('En pause', 'idle');
+                    break;
+                case cast.framework.messages.PlayerState.BUFFERING:
+                    updateStatus('Mise en mémoire tampon...', 'buffering');
+                    break;
+                case cast.framework.messages.PlayerState.IDLE:
+                    updateStatus('En attente', 'idle');
+                    break;
+            }
+        }
+        
+        // Gestion des erreurs du player
+        function handlePlayerError(event) {
+            const error = event.detailedErrorCode || event.error;
+            log(`❌ Erreur du player: ${error}`, 'error');
+            updateStatus('Erreur de lecture', 'error');
+        }
+        
+        // Configuration des interceptions réseau
+        function setupNetworkInterception() {
+            log('🔧 Configuration des interceptions réseau...');
+            
+            // Sauvegarder les fonctions originales
+            const originalFetch = window.fetch;
+            const originalXMLHttpRequest = window.XMLHttpRequest;
+            
+            // Intercepter fetch
+            window.fetch = function(input, init = {}) {
+                const url = typeof input === 'string' ? input : input.url;
+                
+                if (currentAuthToken && isMediaSegment(url)) {
+                    const newUrl = addTokenToUrl(url, currentAuthToken);
+                    log(`🔗 Token ajouté à: ${url.split('?')[0]}`);
+                    
+                    if (typeof input === 'string') {
+                        input = newUrl;
+                    } else {
+                        input = new Request(newUrl, input);
+                    }
+                }
+                
+                return originalFetch.call(this, input, init);
+            };
+            
+            // Intercepter XMLHttpRequest
+            window.XMLHttpRequest = function() {
+                const xhr = new originalXMLHttpRequest();
+                const originalOpen = xhr.open;
+                
+                xhr.open = function(method, url, async, user, password) {
+                    if (currentAuthToken && isMediaSegment(url)) {
+                        url = addTokenToUrl(url, currentAuthToken);
+                        log(`🔗 Token ajouté à: ${url.split('?')[0]}`);
+                    }
+                    
+                    return originalOpen.call(this, method, url, async, user, password);
+                };
+                
+                return xhr;
+            };
+            
+            log('✅ Interceptions réseau configurées');
+        }
+        
+        // Vérifier si une URL est un segment média
+        function isMediaSegment(url) {
+            return url.includes('.ts') || url.includes('.m4s') || url.includes('.m3u8');
+        }
+        
+        // Ajouter le token à une URL
+        function addTokenToUrl(url, token) {
+            if (url.includes('token=')) {
+                return url; // Token déjà présent
+            }
+            
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}token=${token}`;
+        }
+        
+        // Configuration des contrôles
+        function setupControls() {
+            const playPauseBtn = document.getElementById('play-pause-btn');
+            const volumeBtn = document.getElementById('volume-btn');
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            const progressBar = document.getElementById('progress-bar');
+            const progressFill = document.getElementById('progress-fill');
+            
+            // Bouton play/pause
+            playPauseBtn.addEventListener('click', () => {
+                if (videoPlayer.paused) {
+                    videoPlayer.play();
+                    playPauseBtn.textContent = '⏸️';
+                } else {
+                    videoPlayer.pause();
+                    playPauseBtn.textContent = '▶️';
+                }
+            });
+            
+            // Bouton volume
+            volumeBtn.addEventListener('click', () => {
+                videoPlayer.muted = !videoPlayer.muted;
+                volumeBtn.textContent = videoPlayer.muted ? '🔇' : '🔊';
+            });
+            
+            // Bouton plein écran
+            fullscreenBtn.addEventListener('click', () => {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                } else {
+                    videoPlayer.requestFullscreen();
+                }
+            });
+            
+            // Barre de progression
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const progress = (e.clientX - rect.left) / rect.width;
+                videoPlayer.currentTime = progress * videoPlayer.duration;
+            });
+            
+            // Mise à jour de la barre de progression
+            videoPlayer.addEventListener('timeupdate', () => {
+                if (videoPlayer.duration > 0) {
+                    const progress = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+                    progressFill.style.width = `${progress}%`;
+                }
+            });
+        }
+        
+        // Afficher les contrôles
+        function showControls() {
+            controls.classList.add('visible');
+            setTimeout(() => {
+                controls.classList.remove('visible');
+            }, 5000);
+        }
+        
+        // Masquer le loading
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+        
+        // Formater le temps
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (hours > 0) {
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                return `${minutes}:${secs.toString().padStart(2, '0')}`;
+            }
+        }
+        
+        // Fonction pour charger un stream (appelée depuis l'extérieur)
+        window.loadStream = function(url, token, metadata = {}) {
+            log(`🎬 Chargement du stream: ${url}`);
+            
+            currentAuthToken = token;
+            currentStream = {
+                url: url,
+                title: metadata.title || 'Stream',
+                type: metadata.contentType || 'application/x-mpegURL'
+            };
+            
+            if (currentEnvironment === 'chromecast') {
+                // Le stream sera chargé via Cast SDK
+                log('Stream sera chargé via Cast SDK');
+            } else {
+                // Charger directement dans le player vidéo
+                videoPlayer.src = url;
+                videoPlayer.load();
+                log('Stream chargé dans le player natif');
+            }
+            
+            updateStreamInfo(`Titre: ${currentStream.title}<br>URL: ${url}`);
+        };
+        
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🚀 Initialisation du récepteur universel...');
+            
+            const environment = detectEnvironment();
+            log(`🔍 Environnement détecté: ${environment}`);
+            
+            loadingText.textContent = `Initialisation pour ${environment}...`;
+            
+            // L'initialisation spécifique se fait dans les callbacks des scripts
+        });
+        
+        // Gestion des messages personnalisés (pour communication avec l'app)
+        window.addEventListener('message', (event) => {
+            log(`📨 Message reçu: ${JSON.stringify(event.data)}`);
+            
+            const { type, data } = event.data;
+            
+            switch (type) {
+                case 'LOAD_STREAM':
+                    window.loadStream(data.url, data.token, data.metadata);
+                    break;
+                case 'PLAY':
+                    if (videoPlayer) videoPlayer.play();
+                    break;
+                case 'PAUSE':
+                    if (videoPlayer) videoPlayer.pause();
+                    break;
+                case 'SEEK':
+                    if (videoPlayer) videoPlayer.currentTime = data.time;
+                    break;
+                case 'SET_VOLUME':
+                    if (videoPlayer) videoPlayer.volume = data.volume;
+                    break;
+            }
+        });
+        
+        // Afficher/masquer les panneaux de debug avec des raccourcis clavier
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'd' && e.ctrlKey) {
+                e.preventDefault();
+                const isVisible = debugPanel.style.display !== 'none';
+                debugPanel.style.display = isVisible ? 'none' : 'block';
+            }
+        });
+        
+        // Masquer automatiquement les contrôles et infos après un certain temps
+        let hideTimeout;
+        document.addEventListener('mousemove', () => {
+            showControls();
+            deviceInfo.style.opacity = '1';
+            
+            clearTimeout(hideTimeout);
+            hideTimeout = setTimeout(() => {
+                deviceInfo.style.opacity = '0.3';
+            }, 3000);
+        });
+        
+    </script>
+</body>
+</html> 
